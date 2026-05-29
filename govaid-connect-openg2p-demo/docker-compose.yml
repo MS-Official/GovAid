@@ -1,0 +1,63 @@
+services:
+  postgres:
+    image: postgres:15
+    container_name: govaid-postgres
+    environment:
+      POSTGRES_DB: govaid
+      POSTGRES_USER: govaid
+      POSTGRES_PASSWORD: govaid_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - govaid-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U govaid -d govaid"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  openg2p:
+    platform: linux/amd64
+    image: openg2p/openg2p-social-registry-odoo-package:1.4
+    container_name: govaid-openg2p
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ODOO_DATABASE_HOST: postgres
+      ODOO_DATABASE_PORT_NUMBER: "5432"
+      ODOO_DATABASE_NAME: govaid
+      ODOO_DATABASE_USER: govaid
+      ODOO_DATABASE_PASSWORD: govaid_password
+
+      ODOO_DATABASE_FILTER: ".*"
+      ODOO_LIST_DB: "yes"
+      ODOO_SKIP_BOOTSTRAP: "no"
+      ODOO_SKIP_MODULES_UPDATE: "no"
+      ODOO_LOAD_DEMO_DATA: "no"
+
+      EXTRA_ADDONS_URLS_TO_PULL: ""
+
+      LIMIT_TIME_REAL: "120"
+      LOG_DB: "False"
+      LOG_HANDLER: ":INFO"
+      SERVER_WIDE_MODULES: "base,web"
+
+      OPENG2P_SMTP_PORT: ""
+      OPENG2P_SMTP_HOST: ""
+
+      BITNAMI_DEBUG: "false"
+    volumes:
+      - odoo_data:/bitnami/odoo
+      - ./custom-addons:/mnt/extra-addons
+    ports:
+      - "8069:8069"
+    networks:
+      - govaid-net
+
+volumes:
+  postgres_data:
+  odoo_data:
+
+networks:
+  govaid-net:
