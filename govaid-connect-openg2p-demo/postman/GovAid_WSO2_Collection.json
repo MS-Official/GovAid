@@ -1,0 +1,294 @@
+{
+  "info": {
+    "name": "GovAid API — WSO2 Gateway",
+    "description": "Complete Postman collection for testing GovAid REST API through WSO2 API Manager.\n\nSetup:\n1. Set WSO2_BASE_URL, CONSUMER_KEY, CONSUMER_SECRET variables below\n2. Run 'Get OAuth2 Token' first — it auto-saves the token\n3. All other requests use the token automatically",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "WSO2_BASE_URL",
+      "value": "https://localhost:8243",
+      "description": "WSO2 HTTPS Gateway base URL"
+    },
+    {
+      "key": "WSO2_TOKEN_URL",
+      "value": "https://localhost:9443",
+      "description": "WSO2 Token endpoint base URL"
+    },
+    {
+      "key": "CONSUMER_KEY",
+      "value": "PASTE_YOUR_CONSUMER_KEY_HERE",
+      "description": "From WSO2 Developer Portal → Application → Credentials"
+    },
+    {
+      "key": "CONSUMER_SECRET",
+      "value": "PASTE_YOUR_CONSUMER_SECRET_HERE",
+      "description": "From WSO2 Developer Portal → Application → Credentials"
+    },
+    {
+      "key": "ACCESS_TOKEN",
+      "value": "",
+      "description": "Auto-populated by Get OAuth2 Token request"
+    },
+    {
+      "key": "BENEFICIARY_ID",
+      "value": "1",
+      "description": "Test beneficiary ID — update after creating one"
+    },
+    {
+      "key": "PROGRAM_ID",
+      "value": "1",
+      "description": "Test program ID"
+    }
+  ],
+  "item": [
+    {
+      "name": "🔑 Authentication",
+      "item": [
+        {
+          "name": "Get OAuth2 Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "    pm.collectionVariables.set('ACCESS_TOKEN', json.access_token);",
+                  "    pm.test('Token received successfully', function() { pm.response.to.have.status(200); });",
+                  "    console.log('✅ Token saved. Expires in:', json.expires_in, 'seconds');",
+                  "} else {",
+                  "    pm.test('Token request failed', function() { pm.expect.fail('No access_token in response'); });",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "client_credentials" },
+                { "key": "client_id", "value": "{{CONSUMER_KEY}}" },
+                { "key": "client_secret", "value": "{{CONSUMER_SECRET}}" },
+                { "key": "scope", "value": "govaid:beneficiary:read govaid:beneficiary:write govaid:program:write govaid:eligibility:read govaid:payment:read govaid:grievance:write" }
+              ]
+            },
+            "url": {
+              "raw": "{{WSO2_TOKEN_URL}}/oauth2/token",
+              "host": ["{{WSO2_TOKEN_URL}}"],
+              "path": ["oauth2", "token"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "👥 Beneficiaries",
+      "item": [
+        {
+          "name": "List Beneficiaries",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/beneficiaries?limit=10&offset=0",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "beneficiaries"],
+              "query": [
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Beneficiary",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var json = pm.response.json();",
+                  "    pm.collectionVariables.set('BENEFICIARY_ID', json.id);",
+                  "    pm.test('Beneficiary created', function() { pm.response.to.have.status(201); });",
+                  "    console.log('✅ Created beneficiary ID:', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Fatima Al-Rashidi\",\n  \"gender\": \"female\",\n  \"birthdate\": \"1990-04-15\",\n  \"phone\": \"+966512345678\",\n  \"email\": \"fatima.rashidi@example.gov\"\n}"
+            },
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/beneficiaries",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "beneficiaries"]
+            }
+          }
+        },
+        {
+          "name": "Get Beneficiary by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/beneficiaries/{{BENEFICIARY_ID}}",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "beneficiaries", "{{BENEFICIARY_ID}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📋 Programs",
+      "item": [
+        {
+          "name": "List Active Programs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/programs",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "programs"]
+            }
+          }
+        },
+        {
+          "name": "Enroll Beneficiary in Program",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiary_id\": {{BENEFICIARY_ID}}\n}"
+            },
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/programs/{{PROGRAM_ID}}/enroll",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "programs", "{{PROGRAM_ID}}", "enroll"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "✅ Eligibility",
+      "item": [
+        {
+          "name": "Check Eligibility (All Programs)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiary_id\": {{BENEFICIARY_ID}}\n}"
+            },
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/eligibility/check",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "eligibility", "check"]
+            }
+          }
+        },
+        {
+          "name": "Check Eligibility (Specific Program)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiary_id\": {{BENEFICIARY_ID}},\n  \"program_id\": {{PROGRAM_ID}}\n}"
+            },
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/eligibility/check",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "eligibility", "check"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "💰 Payments",
+      "item": [
+        {
+          "name": "Get Payment History",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" }
+            ],
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/payments/{{BENEFICIARY_ID}}?limit=10",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "payments", "{{BENEFICIARY_ID}}"],
+              "query": [
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "📣 Grievances",
+      "item": [
+        {
+          "name": "Submit Grievance",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{ACCESS_TOKEN}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"beneficiary_id\": {{BENEFICIARY_ID}},\n  \"category\": \"payment_delay\",\n  \"description\": \"My June 2026 payment has not been received yet. My account details are correct.\",\n  \"contact_phone\": \"+966512345678\"\n}"
+            },
+            "url": {
+              "raw": "{{WSO2_BASE_URL}}/govaid/v1/grievances",
+              "host": ["{{WSO2_BASE_URL}}"],
+              "path": ["govaid", "v1", "grievances"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

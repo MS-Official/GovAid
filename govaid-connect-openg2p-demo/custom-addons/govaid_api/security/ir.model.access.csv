@@ -1,0 +1,8 @@
+# GovAid API — Security Access Control
+# Format: id, name, model_id:id, group_id:id, perm_read, perm_write, perm_create, perm_unlink
+
+# Allow the base 'public' user (used by auth="none" controllers via sudo()) 
+# to read registrant records — actual security is enforced by the API key decorator
+access_govaid_api_registrant_read,GovAid API Registrant Read,model_g2p_registrant,base.group_public,1,0,0,0
+access_govaid_api_program_read,GovAid API Program Read,model_g2p_program,base.group_public,1,0,0,0
+access_govaid_api_membership_read,GovAid API Membership Read,model_g2p_program_membership,base.group_public,1,0,0,0

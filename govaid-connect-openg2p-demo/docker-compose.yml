@@ -1,4 +1,8 @@
 services:
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # PostgreSQL 15 — INTERNAL ONLY (no public port mapping)
+  # ─────────────────────────────────────────────────────────────────────────
   postgres:
     image: postgres:15
     container_name: govaid-postgres
@@ -10,12 +14,17 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - govaid-net
+    # ⚠️  No 'ports:' mapping — PostgreSQL is NEVER exposed publicly
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U govaid -d govaid"]
       interval: 5s
       timeout: 5s
       retries: 20
 
+  # ─────────────────────────────────────────────────────────────────────────
+  # OpenG2P / Odoo Backend — INTERNAL ONLY
+  # WSO2 reaches this via Docker network DNS: http://govaid-openg2p:8069
+  # ─────────────────────────────────────────────────────────────────────────
   openg2p:
     platform: linux/amd64
     image: openg2p/openg2p-social-registry-odoo-package:1.4
@@ -47,17 +56,85 @@ services:
       OPENG2P_SMTP_HOST: ""
 
       BITNAMI_DEBUG: "false"
+
+      # ── WSO2→Odoo shared secret (must match WSO2 mediation sequence) ──
+      # Generated with: openssl rand -hex 32
+      # ⚠️  Copy this EXACT value into config/wso2-mediation-sequence.xml
+      GOVAID_WSO2_API_KEY: "5b2db221d18a7787fde756db54741a3b12ebf43ed51c8448f42e1ccc12b1135d"
+
     volumes:
       - odoo_data:/bitnami/odoo
       - ./custom-addons:/mnt/extra-addons
+      # NOTE: Do NOT mount odoo.conf here.
+      # The Bitnami startup script generates /opt/bitnami/odoo/conf/odoo.conf
+      # dynamically from the environment variables above. Mounting it as :ro
+      # causes "Read-only file system" and crashes the container.
+    # ──────────────────────────────────────────────────────────────────────
+    # LOCAL DEV ONLY: uncomment below to access Odoo UI directly
+    # Remove or comment in staging/production — access only via WSO2
+    # ──────────────────────────────────────────────────────────────────────
     ports:
-      - "8069:8069"
+      - "127.0.0.1:8069:8069"   # bound to localhost only, not 0.0.0.0
     networks:
       - govaid-net
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # WSO2 API Manager 4.3 — PUBLIC GATEWAY
+  # Publisher/Admin UI: https://localhost:9443
+  # HTTP  Gateway:      http://localhost:8280
+  # HTTPS Gateway:      https://localhost:8243  ← primary client endpoint
+  # ─────────────────────────────────────────────────────────────────────────
+  wso2am:
+    image: wso2/wso2am:4.3.0
+    container_name: govaid-wso2am
+    depends_on:
+      - openg2p
+    ports:
+      - "9443:9443"   # Publisher / DevPortal / Admin console
+      - "8280:8280"   # HTTP API Gateway
+      - "8243:8243"   # HTTPS API Gateway (primary)
+    volumes:
+      - wso2am_logs:/home/wso2carbon/wso2am-4.3.0/repository/logs
+      - wso2am_conf:/home/wso2carbon/wso2am-4.3.0/repository/conf
+    networks:
+      - govaid-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -k -f https://localhost:9443/carbon/ || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 10
+      start_period: 180s
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # NGINX Reverse Proxy — optional but recommended for production
+  # Routes govaid-api.example.gov → WSO2 HTTPS gateway
+  # Routes govaid-admin.example.gov → WSO2 admin (VPN-restricted)
+  # ─────────────────────────────────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: govaid-nginx
+    depends_on:
+      - wso2am
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
+    networks:
+      - govaid-net
+    profiles:
+      - nginx   # Only starts when: docker compose --profile nginx up
 
 volumes:
   postgres_data:
   odoo_data:
+  wso2am_logs:
+  wso2am_conf:
 
 networks:
   govaid-net:
+    driver: bridge
+    # All containers share this private bridge network.
+    # Inter-service communication uses container DNS names.
+    # Only explicitly mapped 'ports:' entries are reachable from host.

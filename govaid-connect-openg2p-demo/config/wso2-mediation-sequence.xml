@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  GovAid API — WSO2 Synapse Mediation Sequence
+  ================================================
+  Purpose: Inject Odoo backend API key after WSO2 validates the OAuth2 Bearer token.
+
+  How to apply in WSO2 Publisher:
+    1. Open Publisher → GovAidAPI → Resources
+    2. For each resource → "Message Mediation" → "In Flow"
+    3. Click "Add Policy" → "Custom"
+    4. Paste this XML content
+    5. Save and Re-publish the API
+
+  OR apply at the API level:
+    API → "Runtime" → "Message Mediation"→ "In Flow" → Upload this file
+
+  Variables to replace:
+    - CHANGE_ME_IN_PRODUCTION: Must match GOVAID_WSO2_API_KEY env var in docker-compose.yml
+-->
+<sequence xmlns="http://ws.apache.org/ns/synapse" name="govaid-backend-auth-in">
+
+    <!-- ─── Step 1: Remove the Bearer token header ───────────────────────
+         Odoo should NEVER receive the client's OAuth2 token.
+         WSO2 has already validated it; strip it before forwarding.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <header name="Authorization" action="remove" scope="transport"/>
+
+    <!-- ─── Step 2: Inject shared backend API key ─────────────────────────
+         This key is validated by the @govaid_api_auth decorator in Odoo.
+         Value MUST match the GOVAID_WSO2_API_KEY environment variable.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <header name="X-GovAid-Api-Key"
+            value="5b2db221d18a7787fde756db54741a3b12ebf43ed51c8448f42e1ccc12b1135d"
+            scope="transport"/>
+
+    <!-- ─── Step 3: Forward caller identity for audit logging ─────────────
+         Odoo logs X-GovAid-Caller to identify which client/application
+         made the request. Useful for audit trails without exposing tokens.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <header name="X-GovAid-Caller"
+            expression="get-property('api.ut.userName')"
+            scope="transport"/>
+
+    <!-- ─── Step 4: Forward subscriber application name ──────────────────
+         Helps correlate requests to specific partner agency applications.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <header name="X-GovAid-App"
+            expression="get-property('api.ut.application.name')"
+            scope="transport"/>
+
+    <!-- ─── Step 5: Add request tracing correlation ID ────────────────────
+         Enables end-to-end tracing across WSO2 → Odoo → database logs.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <property name="CORRELATION_ID"
+              expression="get-property('correlation_id')"
+              scope="axis2"/>
+    <header name="X-Correlation-ID"
+            expression="get-property('correlation_id')"
+            scope="transport"/>
+
+    <!-- ─── Step 6: Set content type ─────────────────────────────────────
+         Ensure Odoo always receives JSON content type.
+    ─────────────────────────────────────────────────────────────────────── -->
+    <header name="Content-Type"
+            value="application/json"
+            scope="transport"/>
+
+</sequence>
